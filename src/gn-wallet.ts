@@ -1,0 +1,205 @@
+// src/gn-wallet.ts (v1.0.10)
+import { Signer, Provider, AddressOption, SignTransactionOptions, SignatureRequest, SignatureResponse, DEFAULT_SIGHASH_TYPE } from 'scrypt-ts';
+import * as bsv from '@scrypt-inc/bsv';
+import { GNWalletOptions } from './interfaces';
+
+export class GNWallet extends Signer {
+    private privateKey: bsv.PrivateKey;
+    private address: bsv.Address;
+    private pubKey: bsv.PublicKey;
+    private options: Required<GNWalletOptions>;
+
+    constructor(privateKey: bsv.PrivateKey | string, provider?: Provider, options?: GNWalletOptions) {
+        super(provider);
+        if (typeof privateKey === 'string') {
+            this.privateKey = bsv.PrivateKey.fromString(privateKey);
+        } else {
+            this.privateKey = privateKey;
+        }
+        this.pubKey = this.privateKey.toPublicKey();
+        this.address = this.pubKey.toAddress();
+        this.options = {
+            network: options?.network ?? bsv.Networks.mainnet,
+            cacheTTL: options?.cacheTTL ?? 30000,
+            targetUtxos: options?.targetUtxos ?? 50,
+            dustLimit: options?.dustLimit ?? 546,
+        };
+    }
+
+    async connect(provider: Provider): Promise<this> {
+        this.provider = provider;
+        return this;
+    }
+
+    async getNetwork(): Promise<bsv.Networks.Network> {
+        return this.options.network;
+    }
+
+    async getDefaultAddress(): Promise<bsv.Address> {
+        return this.address;
+    }
+
+    async getDefaultPubKey(): Promise<bsv.PublicKey> {
+        return this.pubKey;
+    }
+
+    async getPubKey(address?: AddressOption): Promise<bsv.PublicKey> {
+        if (address && address.toString() !== this.address.toString()) {
+            throw new Error("GNWallet solo posee una dirección");
+        }
+        return this.pubKey;
+    }
+
+    async isAuthenticated(): Promise<boolean> {
+        return true;
+    }
+
+    async requestAuth(): Promise<{ isAuthenticated: boolean; error: string }> {
+        return { isAuthenticated: true, error: '' };
+    }
+
+    setProvider(provider: Provider): void {
+        this.provider = provider;
+    }
+
+    async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+        const tx = new bsv.Transaction(rawTxHex);
+        const responses: SignatureResponse[] = [];
+
+        for (const req of sigRequests) {
+            try {
+                const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
+                const sigHex = tx.getSignature(req.inputIndex, this.privateKey, sighashType);
+
+                if (!sigHex || typeof sigHex !== 'string') {
+                    throw new Error(`No se pudo generar firma para input ${req.inputIndex}`);
+                }
+
+                responses.push({
+                    inputIndex: req.inputIndex,
+                    sig: sigHex,
+                    publicKey: this.pubKey.toBuffer().toString('hex'),
+                    sigHashType: sighashType,
+                    csIdx: req.csIdx,
+                });
+            } catch (e) {
+                console.warn(`Error firmando input ${req.inputIndex}:`, e);
+                responses.push({
+                    inputIndex: req.inputIndex,
+                    sig: '',
+                    publicKey: '',
+                    sigHashType: req.sigHashType ?? DEFAULT_SIGHASH_TYPE,
+                    csIdx: req.csIdx,
+                });
+            }
+        }
+        return responses;
+    }
+
+    async signRawTransaction(rawTxHex: string, options?: SignTransactionOptions): Promise<string> {
+        const tx = new bsv.Transaction(rawTxHex);
+        const signedTx = await this.signTransaction(tx, options);
+        return signedTx.serialize();
+    }
+
+    async signTransaction(tx: bsv.Transaction, options?: SignTransactionOptions): Promise<bsv.Transaction> {
+        for (let i = 0; i < tx.inputs.length; i++) {
+            try {
+                tx.sign(this.privateKey);
+            } catch (e) {
+                console.warn(`No se pudo firmar input ${i}:`, e);
+            }
+        }
+        return tx;
+    }
+
+    async signMessage(message: string, address?: AddressOption): Promise<string> {
+        return bsv.Message.sign(message, this.privateKey).toString();
+    }
+
+    async getBalance(address?: AddressOption): Promise<{ confirmed: number; unconfirmed: number }> {
+        if (!this.provider) throw new Error("Provider no conectado");
+        const addr = address ? address : this.address;
+        return this.provider.getBalance(addr);
+    }
+
+    async _signAndSendTransaction(tx: bsv.Transaction): Promise<string> {
+        if (!this.provider) throw new Error("Provider no conectado");
+        const changeAddress = this.address;
+        const currentUtxos = await this.provider.listUnspent(changeAddress);
+        const currentCount = currentUtxos.length;
+        const txWithSplit = await this.splitChangeOutput(tx, changeAddress, currentCount);
+        const signedTx = await this.signTransaction(txWithSplit);
+        const txid = await this.provider.sendTransaction(signedTx);
+        return txid;
+    }
+
+    private async splitChangeOutput(
+        tx: bsv.Transaction,
+        changeAddress: bsv.Address,
+        currentUtxoCount: number
+    ): Promise<bsv.Transaction> {
+        const dustLimit = this.options.dustLimit;
+        const target = this.options.targetUtxos;
+        const myScript = bsv.Script.buildPublicKeyHashOut(changeAddress);
+        const myScriptHex = myScript.toHex();
+
+        // 1. Encontrar el output de cambio
+        const changeIndex = tx.outputs.findIndex(out => out.script.toHex() === myScriptHex);
+        if (changeIndex === -1) return tx;
+
+        const changeAmount = tx.outputs[changeIndex].satoshis;
+        const needed = target - currentUtxoCount;
+
+        if (changeAmount < dustLimit || needed <= 1) return tx;
+
+        const maxSplits = Math.floor(changeAmount / dustLimit);
+        let splits = Math.min(needed, maxSplits);
+        if (splits < 2) return tx;
+
+        // 2. Distribución equitativa
+        const valuePerSplit = Math.floor(changeAmount / splits);
+        let remaining = changeAmount;
+        const newOutputs = tx.outputs.filter((_, idx) => idx !== changeIndex);
+
+        for (let i = 0; i < splits; i++) {
+            const isLast = i === splits - 1;
+            const val = isLast ? remaining : valuePerSplit;
+            if (val >= dustLimit) {
+                newOutputs.push(new bsv.Transaction.Output({
+                    satoshis: val,
+                    script: myScript
+                }));
+            }
+            remaining -= val;
+        }
+        tx.outputs = newOutputs;
+
+        // 3. Recalcular fee exactamente (como en la versión original)
+        const oldFee = tx.getFee();
+        const rawHex = tx.serialize();
+        const txSizeBytes = rawHex.length / 2;
+        const feePerKb = await this.provider!.getFeePerKb();
+        const newFee = Math.ceil((txSizeBytes * feePerKb) / 1000);
+        const feeDiff = newFee - oldFee;
+
+        if (feeDiff > 0) {
+            const lastIndex = tx.outputs.length - 1;
+            const lastOutput = tx.outputs[lastIndex];
+            if (lastOutput.satoshis - feeDiff >= dustLimit) {
+                const adjustedOutput = new bsv.Transaction.Output({
+                    satoshis: lastOutput.satoshis - feeDiff,
+                    script: lastOutput.script
+                });
+                tx.outputs[lastIndex] = adjustedOutput;
+                console.log(`[GNWallet] Fee ajustado: +${feeDiff} sats`);
+            } else {
+                console.warn(`[GNWallet] Fee extra (${feeDiff}) imposible de cubrir, abortando split.`);
+                return tx;
+            }
+        }
+
+        console.log(`[GNWallet] Split: ${splits} UTXOs de ~${valuePerSplit} sats, fee ${newFee} sats`);
+        return tx;
+    }
+}
