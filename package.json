@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "prepublish": "npm run build",
+    "prepublishOnly": "npm run build",
     "test": "jest"
   },
   "repository": {
@@ -24,8 +24,7 @@
   "license": "MIT",
   "dependencies": {
     "@scrypt-inc/bsv": "^1.0.5",
-    "bsv": "^2.0.10",
-    "scrypt-ts": "^1.4.5"
+    "scrypt-ts": "1.4.5"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
@@ -37,6 +36,11 @@
   "peerDependencies": {
     "gn-provider": "^1.0.0"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "bugs": {
     "url": "https://github.com/borisjavier/gn-wallet/issues"
   },

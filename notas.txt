@@ -1,0 +1,195 @@
+
+
+1754446504
+1754450107
+
+
+
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=scrypt-service" AND timestamp>='2025-08-05T23:10:00Z' AND timestamp<='2025-05-06T00:20:00Z'" --limit=100 --format="json"
+
+
+
+{
+  "contractId": "aa4e772a5f073afaeffe17d20489db89a129c7ed7d2cf5d59bb2da0ffa063487",
+  "state": [
+    {
+      "timestamp": "1732128366",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732128466",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732128566",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732128666",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732128766",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732128866",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732128966",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129066",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129166",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129266",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129366",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129466",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129566",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129666",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129766",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129866",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732129966",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732130066",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732130166",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732130266",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732130366",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732130466",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732130566",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    },
+    {
+      "timestamp": "1732130666",
+      "txid": "501a9448665a70e3efe50adafc0341c033e2f22913cc0fb6b76cbcb5c54e7836"
+    }
+  ],
+  "addressOwner": "17bwQXi3Ve1pn6YRE2q6ENLWCa4R8soypE",
+  "addressGN": "14HGSX9cmRvBnuJPd77KT1m2V1LqBnKbcz",
+  "paymentQuarks": "1000"
+}
+
+
+
+
+gn-wallet/
+├── src/
+│   ├── index.ts          # Exportación principal
+│   ├── gn-wallet.ts      # Implementación de GNWallet
+│   ├── interfaces.ts     # Interfaces personalizadas
+│   └── utils.ts          # Funciones utilitarias
+├── test/
+│   └── gn-wallet.test.ts # Pruebas unitarias
+├── package.json
+├── tsconfig.json
+└── README.md
+
+
+
+Estamos en scrypt-ts latest, estos son los errores que tengo en gn-wallet.ts
+
+
+signRawTransaction: Property 'signRawTransaction' in type 'GNWallet' is not assignable to the same property in base type 'Signer'.
+  Type '(tx: Transaction, lockingScripts: Buffer[], inputIndex: number) => Promise<Transaction>' is not assignable to type '(rawTxHex: string, options: SignTransactionOptions) => Promise<string>'.
+    Target signature provides too few arguments. Expected 3 or more, but got 2.ts(2416)
+
+Buffer: Cannot find name 'Buffer'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.ts(2580)
+
+hashForSignature: Property 'hashForSignature' does not exist on type 'Transaction'.ts(2339)
+
+little: Expected 2 arguments, but got 3.ts(2554)
+
+.set: Property 'set' does not exist on type 'Signature'.ts(2339)
+
+new bsv.Script(): Expected 1 arguments, but got 0.ts(2554)
+index.d.ts(1310, 21): An argument for 'data' was not provided.
+
+Buffer: Cannot find name 'Buffer'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.ts(2580)
+
+
+
+
+if(proposalType === 'deployment') {
+            if (nextStage === 'deployed') {
+                const contractAddress = metadata.contractKeys?.address || '';
+                const txid = metadata.deploymentTxid || '';
+                const pdfUrl = metadata.pdfPath || '#';
+                console.log('Step 6 - DEPLOYED MY FRIEND')
+                if (currentUserRole === 'Alice') {
+                    console.log(`Estos son los datos Alice: ${txid, contractAddress, pdfUrl}`);
+                    document.getElementById('contractTxid').textContent = txid;
+                    document.getElementById('gn-address').textContent = contractAddress;
+                    document.getElementById('pdfLink').href = pdfUrl;
+                } else {
+                    console.log(`Estos son los datos Bob: ${txid, contractAddress, pdfUrl}`);
+                    document.getElementById('bob-contractTxid').textContent = txid;
+                    document.getElementById('bob-gn-address').textContent = contractAddress;
+                    document.getElementById('bob-pdfLink').href = pdfUrl;
+                }
+            } 
+          
+            if(nextStage === 'final' && currentUserRole === 'Alice') {
+              document.getElementById('final-montoTotal').textContent = content['montoTotal'];
+            } else if(nextStage === 'waiting-final' && currentUserRole === 'Bob') {
+              document.getElementById('bob-final-montoTotal').textContent = content['montoTotal'];
+              document.getElementById('bob-final-plazo').textContent = `${content['timeLimit']} ${content['timeUnit']}`;           
+            }           
+          } 
+
+
+shortenHex()
+
+
+const contractAddress = metadata.contractKeys.address || '';
+                const shortAddress = shortenHex(contractAddress);
+                const txid = metadata.deploymentTxid || '';
+                const shortenTxid = shortenHex(shortenTxid);
+                const pdfUrl = metadata.pdfPath || '#';
+
+
+<i class="bi bi-file-earmark-pdf-fill">
