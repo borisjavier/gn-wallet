@@ -66,12 +66,24 @@ export class GNWallet extends Signer {
         return this.pubKey;
     }
 
-    async getPubKey(address?: AddressOption): Promise<bsv.PublicKey> {
+    /*async getPubKey(address?: AddressOption): Promise<bsv.PublicKey> {
         if (address) {
             const addrStr = address.toString();
             const key = this.privateKeys.get(addrStr);
             if (key) return key.toPublicKey();
             throw new Error(`GNWallet no posee la llave para la dirección: ${addrStr}`);
+        }
+        return this.pubKey;
+    }*/
+   async getPubKey(address?: AddressOption): Promise<bsv.PublicKey> {
+        if (address) {
+            const addrStr = address.toString();
+            const key = this.privateKeys.get(addrStr);
+            if (key) return key.toPublicKey();
+            
+            // Si scrypt-ts pregunta por una pubkey que no tenemos, 
+            // es mejor devolver la principal que devolver basura o un error fatal.
+            console.warn(`[GNWallet] PubKey solicitada para ${addrStr} no encontrada, enviando default.`);
         }
         return this.pubKey;
     }
@@ -88,7 +100,7 @@ export class GNWallet extends Signer {
         this.provider = provider;
     }
 
-    async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+    /*async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
         const tx = new bsv.Transaction(rawTxHex);
         const responses: SignatureResponse[] = [];
 
@@ -146,6 +158,65 @@ export class GNWallet extends Signer {
                     sigHashType: req.sigHashType ?? DEFAULT_SIGHASH_TYPE,
                     csIdx: req.csIdx,
                 });
+            }
+        }
+        return responses;
+    }*/
+   async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+        const tx = new bsv.Transaction(rawTxHex);
+        const responses: SignatureResponse[] = [];
+
+        for (const req of sigRequests) {
+            try {
+                // 1. Buscamos si tenemos la llave para alguna de las direcciones solicitadas
+                const addressesToTry = req.address 
+                    ? (Array.isArray(req.address) ? req.address : [req.address]) 
+                    : [this.address];
+
+                let signingKey: bsv.PrivateKey | undefined;
+                for (const addr of addressesToTry) {
+                    signingKey = this.privateKeys.get(addr.toString());
+                    if (signingKey) break;
+                }
+
+                // --- CAMBIO CRUCIAL ---
+                // Si no tenemos la llave, NO agregamos nada al array de respuestas.
+                if (!signingKey) {
+                    continue; 
+                }
+
+                const script = req.scriptHex 
+                    ? bsv.Script.fromHex(req.scriptHex) 
+                    : bsv.Script.buildPublicKeyHashOut(signingKey.toAddress());
+                
+                const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
+                const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
+                
+                const hash = bsv.Transaction.Sighash.sighash(
+                    tx,
+                    sighashType,
+                    req.inputIndex,
+                    subScript,
+                    new bsv.crypto.BN(req.satoshis)
+                );
+
+                const sigObj = bsv.crypto.ECDSA.sign(hash, signingKey);
+                const sigHex = sigObj.toString();
+                const sighashByte = (sighashType & 0xff).toString(16).padStart(2, '0');
+                const fullSig = sigHex + sighashByte;
+
+                responses.push({
+                    inputIndex: req.inputIndex,
+                    sig: fullSig,
+                    publicKey: signingKey.toPublicKey().toString(), // Siempre será válida aquí
+                    sigHashType: sighashType,
+                    csIdx: req.csIdx,
+                });
+
+            } catch (e) {
+                // Si hay un error real en el proceso de firma, logueamos pero no 
+                // enviamos una respuesta rota que haga crashear la ejecución.
+                console.error(`[GNWallet] Error procesando firma para input ${req.inputIndex}:`, e);
             }
         }
         return responses;
