@@ -134,7 +134,7 @@ export class GNWallet extends Signer {
         return txid;
     }
 
-    private async splitChangeOutput(
+    /*private async splitChangeOutput(
         tx: bsv.Transaction,
         changeAddress: bsv.Address,
         currentUtxoCount: number
@@ -200,6 +200,145 @@ export class GNWallet extends Signer {
         }
 
         console.log(`[GNWallet] Split: ${splits} UTXOs de ~${valuePerSplit} sats, fee ${newFee} sats`);
+        return tx;
+    }*/
+   /**
+ * Función de ayuda para extraer una dirección de un script P2PKH.
+ * No depende de métodos inexistentes en la API.
+ */
+private extractAddressFromScript(script: bsv.Script, network: bsv.Networks.Network): bsv.Address | null {
+    try {
+        // La estructura de un script P2PKH es: OP_DUP (0x76) OP_HASH160 (0xA9) [20 bytes pubkeyhash] OP_EQUALVERIFY (0x88) OP_CHECKSIG (0xAC)
+        // En hex: "76a9" + "20 bytes de pubkeyhash" + "88ac"
+        const scriptHex = script.toHex();
+        if (!scriptHex.startsWith('76a9') || !scriptHex.endsWith('88ac') || scriptHex.length !== 50) {
+            console.warn(`[GNWallet] Script no es P2PKH estándar: ${scriptHex}`);
+            return null;
+        }
+
+        // Extraer el pubkeyhash (los 20 bytes centrales)
+        const pubKeyHashHex = scriptHex.substring(4, 44); // 4 para '76a9', 44 es '4 + 40 (20 bytes * 2)'
+        const pubKeyHashBuffer = Buffer.from(pubKeyHashHex, 'hex');
+
+        // Crear la dirección a partir del pubkeyhash y la red
+        const versionByte = network === bsv.Networks.mainnet ? Buffer.from('00', 'hex') : Buffer.from('6f', 'hex');
+        const addressBuffer = Buffer.concat([versionByte, pubKeyHashBuffer]);
+        // 'bsv.Address.fromHex' espera un hex de 21 bytes (version + hash)
+        return bsv.Address.fromHex(addressBuffer.toString('hex'));
+    } catch (e) {
+        console.error(`[GNWallet] Error extrayendo dirección del script: ${e}`);
+        return null;
+    }
+}
+
+private async splitChangeOutput(
+        tx: bsv.Transaction,
+        changeAddress: bsv.Address,
+        currentUtxoCount: number
+    ): Promise<bsv.Transaction> {
+        const dustLimit = this.options.dustLimit;
+        const target = this.options.targetUtxos;
+        const needed = target - currentUtxoCount;
+
+        console.log(`[GNWallet] ---- SPLIT DEBUG ----`);
+        console.log(`[GNWallet] UTXOs actuales: ${currentUtxoCount}, target: ${target}, necesarios: ${needed}`);
+
+        if (needed <= 1) {
+            console.log(`[GNWallet] No se necesita split (needed=${needed})`);
+            return tx;
+        }
+
+        // 1. Script hex esperado para nuestra dirección
+        const myScriptHex = bsv.Script.buildPublicKeyHashOut(changeAddress).toHex();
+        console.log(`[GNWallet] Script hex esperado: ${myScriptHex}`);
+
+        let changeIndex = -1;
+        let changeAmount = 0;
+
+        for (let i = 0; i < tx.outputs.length; i++) {
+            const output = tx.outputs[i];
+            const outputScriptHex = output.script.toHex();
+            console.log(`[GNWallet] Output ${i}: script=${outputScriptHex.substring(0, 20)}..., valor=${output.satoshis}`);
+
+            // Estrategia 1: Comparación directa de scripts hex
+            if (outputScriptHex === myScriptHex) {
+                changeIndex = i;
+                changeAmount = output.satoshis;
+                console.log(`[GNWallet] Output de cambio encontrado por coincidencia de hex en índice ${i}`);
+                break;
+            }
+
+            // Estrategia 2 (Respaldo): Extraer dirección del script y comparar
+            const outputAddress = this.extractAddressFromScript(output.script, this.options.network);
+            if (outputAddress && outputAddress.toString() === changeAddress.toString()) {
+                changeIndex = i;
+                changeAmount = output.satoshis;
+                console.log(`[GNWallet] Output de cambio encontrado por dirección extraída en índice ${i}`);
+                break;
+            }
+        }
+
+        if (changeIndex === -1) {
+            console.error(`[GNWallet] No se encontró output de cambio. Transacción no modificada.`);
+            return tx;
+        }
+
+        if (changeAmount < dustLimit) {
+            console.log(`[GNWallet] Cambio insuficiente (${changeAmount} < ${dustLimit})`);
+            return tx;
+        }
+
+        const maxSplits = Math.floor(changeAmount / dustLimit);
+        let splits = Math.min(needed, maxSplits);
+        if (splits < 2) {
+            console.log(`[GNWallet] No es posible dividir (splits=${splits})`);
+            return tx;
+        }
+
+        // 2. Distribución equitativa del cambio
+        const valuePerSplit = Math.floor(changeAmount / splits);
+        let remaining = changeAmount;
+        const newOutputs = tx.outputs.filter((_, idx) => idx !== changeIndex);
+
+        for (let i = 0; i < splits; i++) {
+            const isLast = i === splits - 1;
+            const val = isLast ? remaining : valuePerSplit;
+            if (val >= dustLimit) {
+                newOutputs.push(new bsv.Transaction.Output({
+                    satoshis: val,
+                    script: bsv.Script.buildPublicKeyHashOut(changeAddress)
+                }));
+            }
+            remaining -= val;
+        }
+        tx.outputs = newOutputs;
+
+        // 3. Recalcular fee
+        const oldFee = tx.getFee();
+        const rawHex = tx.serialize();
+        const txSizeBytes = rawHex.length / 2;
+        const feePerKb = await this.provider!.getFeePerKb();
+        const newFee = Math.ceil((txSizeBytes * feePerKb) / 1000);
+        const feeDiff = newFee - oldFee;
+
+        if (feeDiff > 0) {
+            const lastIndex = tx.outputs.length - 1;
+            const lastOutput = tx.outputs[lastIndex];
+            if (lastOutput.satoshis - feeDiff >= dustLimit) {
+                const adjustedOutput = new bsv.Transaction.Output({
+                    satoshis: lastOutput.satoshis - feeDiff,
+                    script: lastOutput.script
+                });
+                tx.outputs[lastIndex] = adjustedOutput;
+                console.log(`[GNWallet] Fee ajustado: +${feeDiff} sats, nuevo fee total=${newFee}`);
+            } else {
+                console.warn(`[GNWallet] Fee extra (${feeDiff}) imposible de cubrir, abortando split.`);
+                return tx;
+            }
+        }
+
+        console.log(`[GNWallet] Split realizado: ${splits} UTXOs de ~${valuePerSplit} sats (cambio original ${changeAmount})`);
+        console.log(`[GNWallet] ---- FIN SPLIT DEBUG ----`);
         return tx;
     }
 }
