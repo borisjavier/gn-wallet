@@ -68,6 +68,15 @@ export class GNWallet extends Signer {
 
         for (const req of sigRequests) {
             try {
+
+                if (req.scriptHex !== undefined && req.satoshis !== undefined) {
+                    tx.inputs[req.inputIndex].output = new bsv.Transaction.Output({
+                        script: bsv.Script.fromHex(req.scriptHex),
+                        satoshis: req.satoshis
+                    });
+                } else {
+                    throw new Error(`Faltan scriptHex o satoshis para el input ${req.inputIndex}`);
+                }
                 const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
                 const sigHex = tx.getSignature(req.inputIndex, this.privateKey, sighashType);
 
