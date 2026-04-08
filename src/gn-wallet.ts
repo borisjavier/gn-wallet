@@ -286,6 +286,11 @@ export class GNWallet extends Signer {
 
         // Obtenemos todas las llaves que tiene la billetera
         const allPrivateKeys = Array.from(this.privateKeys.values());
+        console.log(`[DEBUG] GNWallet posee ${allPrivateKeys.length} llaves.`);
+        allPrivateKeys.forEach((k, i) => {
+            console.log(`[DEBUG] Llave ${i} -> Public Key: ${k.toPublicKey().toString()}`);
+        });
+        console.log(`[DEBUG] El contrato está pidiendo específicamente: 02166c5a6c7f6146821c18c39bfe80ed1541c5317ace48d5892f9ba680a130e154`);
 
         for (const req of sigRequests) {
             // Para cada requerimiento de firma del contrato...
