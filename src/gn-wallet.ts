@@ -221,7 +221,7 @@ export class GNWallet extends Signer {
         }
         return responses;
     }*/
-   async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+   /*async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
         const tx = new bsv.Transaction(rawTxHex);
         const responses: SignatureResponse[] = [];
 
@@ -275,6 +275,52 @@ export class GNWallet extends Signer {
                 }
             } catch (e) {
                 console.error(`[GNWallet] Error procesando firmas para input ${req.inputIndex}:`, e);
+            }
+        }
+        return responses;
+    }*/
+
+    async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+        const tx = new bsv.Transaction(rawTxHex);
+        const responses: SignatureResponse[] = [];
+
+        // Obtenemos todas las llaves que tiene la billetera
+        const allPrivateKeys = Array.from(this.privateKeys.values());
+
+        for (const req of sigRequests) {
+            // Para cada requerimiento de firma del contrato...
+            for (const privKey of allPrivateKeys) {
+                try {
+                    const pubKeyHex = privKey.toPublicKey().toString();
+                    
+                    // Generamos la firma técnica
+                    const script = req.scriptHex 
+                        ? bsv.Script.fromHex(req.scriptHex) 
+                        : bsv.Script.buildPublicKeyHashOut(privKey.toAddress());
+                    
+                    const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
+                    const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
+                    
+                    const hash = bsv.Transaction.Sighash.sighash(
+                        tx, sighashType, req.inputIndex, subScript, new bsv.crypto.BN(req.satoshis)
+                    );
+
+                    const sigObj = bsv.crypto.ECDSA.sign(hash, privKey);
+                    const fullSig = sigObj.toString() + (sighashType & 0xff).toString(16).padStart(2, '0');
+
+                    // ENVIAMOS LA FIRMA
+                    // scrypt-ts usará el campo 'publicKey' para saber si esta firma le sirve
+                    responses.push({
+                        inputIndex: req.inputIndex,
+                        sig: fullSig,
+                        publicKey: pubKeyHex, // <--- Este es el ID que hace el match
+                        sigHashType: sighashType,
+                        csIdx: req.csIdx,
+                    });
+                } catch (e) {
+                    // Si una llave no puede firmar este input, simplemente la saltamos
+                    continue;
+                }
             }
         }
         return responses;
