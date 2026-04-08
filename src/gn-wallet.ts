@@ -63,6 +63,8 @@ export class GNWallet extends Signer {
     }
 
     async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+
+        console.log(`[GNWallet] Mi llave pública es: ${this.pubKey.toString()}`);
         const tx = new bsv.Transaction(rawTxHex);
         const responses: SignatureResponse[] = [];
 
@@ -84,10 +86,14 @@ export class GNWallet extends Signer {
                     throw new Error(`No se pudo generar firma para input ${req.inputIndex}`);
                 }
 
+                //const sighashByte = (sighashType & 0xff).toString(16).padStart(2, '0');
+                //const fullSig = sigHex + sighashByte;
+
                 responses.push({
                     inputIndex: req.inputIndex,
                     sig: sigHex,
-                    publicKey: this.pubKey.toBuffer().toString('hex'),
+                    publicKey: this.pubKey.toString(), 
+                    //publicKey: this.pubKey.toBuffer().toString('hex'),
                     sigHashType: sighashType,
                     csIdx: req.csIdx,
                 });
