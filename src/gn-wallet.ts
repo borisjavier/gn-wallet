@@ -335,44 +335,48 @@ export class GNWallet extends Signer {
     async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
         const tx = new bsv.Transaction(rawTxHex);
         const responses: SignatureResponse[] = [];
-        const allPrivateKeys = Array.from(this.privateKeys.values());
 
         for (const req of sigRequests) {
-            // Validar que tengamos los datos necesarios
-            if (!req.scriptHex || !req.satoshis) {
-                console.error(`[GNWallet] Faltan scriptHex o satoshis para input ${req.inputIndex}`);
-                continue;
+            // Determinar las direcciones que debemos firmar
+            let addresses: bsv.Address[] = [];
+            if (req.address) {
+                addresses = Array.isArray(req.address) ? req.address : [req.address];
+            } else {
+                // Si no hay dirección, usar todas las claves (raro, pero por compatibilidad)
+                addresses = Array.from(this.privateKeys.keys()).map(addrStr => new bsv.Address(addrStr));
             }
 
-            for (const privKey of allPrivateKeys) {
-                try {
-                    // Reconstruir el locking script (usar el proporcionado, no construir P2PKH)
-                    const script = bsv.Script.fromHex(req.scriptHex);
-                    // Manejar OP_CODESEPARATOR
-                    const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
-                    const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
-
-                    // ✅ Usar signTx (la misma que TestWallet)
-                    const sig = signTx(
-                        tx,
-                        privKey,
-                        subScript,
-                        req.satoshis,
-                        req.inputIndex,
-                        sighashType
-                    );
-
-                    responses.push({
-                        inputIndex: req.inputIndex,
-                        sig: sig,                 // signTx ya devuelve DER + sighash byte
-                        publicKey: privKey.toPublicKey().toString(),
-                        sigHashType: sighashType,
-                        csIdx: req.csIdx,
-                    });
-                } catch (e) {
-                    // Si esta clave no puede firmar, continuar
+            for (const addr of addresses) {
+                const privKey = this.privateKeys.get(addr.toString());
+                if (!privKey) {
+                    console.warn(`[GNWallet] No se encontró clave para dirección ${addr}`);
                     continue;
                 }
+
+                if (!req.scriptHex || !req.satoshis) {
+                    console.error(`[GNWallet] Faltan datos para input ${req.inputIndex}`);
+                    continue;
+                }
+
+                const script = bsv.Script.fromHex(req.scriptHex);
+                const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
+                const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
+                const signature = signTx(
+                    tx,
+                    privKey,
+                    subScript,
+                    req.satoshis,
+                    req.inputIndex,
+                    sighashType
+                );
+
+                responses.push({
+                    inputIndex: req.inputIndex,
+                    sig: signature,
+                    publicKey: privKey.toPublicKey().toString(),
+                    sigHashType: sighashType,
+                    csIdx: req.csIdx,
+                });
             }
         }
         return responses;
