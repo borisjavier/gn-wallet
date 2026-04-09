@@ -2,6 +2,7 @@
 import { Signer, Provider, AddressOption, SignTransactionOptions, SignatureRequest, SignatureResponse, DEFAULT_SIGHASH_TYPE } from 'scrypt-ts';
 import * as bsv from '@scrypt-inc/bsv';
 import { GNWalletOptions } from './interfaces';
+import { signTx } from 'scryptlib/dist';
 
 export class GNWallet extends Signer {
     private privateKeys: Map<string, bsv.PrivateKey> = new Map();
@@ -334,65 +335,46 @@ export class GNWallet extends Signer {
     async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
         const tx = new bsv.Transaction(rawTxHex);
         const responses: SignatureResponse[] = [];
-        
-        // Obtenemos todas las llaves disponibles en la billetera
         const allPrivateKeys = Array.from(this.privateKeys.values());
 
         for (const req of sigRequests) {
+            // Validar que tengamos los datos necesarios
+            if (!req.scriptHex || !req.satoshis) {
+                console.error(`[GNWallet] Faltan scriptHex o satoshis para input ${req.inputIndex}`);
+                continue;
+            }
+
             for (const privKey of allPrivateKeys) {
                 try {
-                    // 1. Determinamos el script. 
-                    // Si el request no lo trae, construimos el P2PKH de la llave actual.
-                    const script = req.scriptHex 
-                        ? bsv.Script.fromHex(req.scriptHex) 
-                        : bsv.Script.buildPublicKeyHashOut(privKey.toAddress());
-
-                    // 2. PASO CRUCIAL: Inyectamos el output previo en el input de la TX.
-                    // Sin esto, el cálculo del sighash (Preimage) será incorrecto para smart contracts.
-                    if (tx.inputs[req.inputIndex]) {
-                        tx.inputs[req.inputIndex].output = new bsv.Transaction.Output({
-                            script: script,
-                            satoshis: req.satoshis
-                        });
-                    }
-
-                    // 3. Preparamos el subscript (manejando OP_CODESEPARATOR si existe)
+                    // Reconstruir el locking script (usar el proporcionado, no construir P2PKH)
+                    const script = bsv.Script.fromHex(req.scriptHex);
+                    // Manejar OP_CODESEPARATOR
                     const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
-                    
-                    // 4. Definimos el sighashType. 
-                    // Usamos DEFAULT_SIGHASH_TYPE (0x41) para asegurar SIGHASH_ALL | SIGHASH_FORKID
                     const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
-                    
-                    // 5. Calculamos el Hash de la transacción (Sighash)
-                    const hash = bsv.Transaction.Sighash.sighash(
-                        tx, 
-                        sighashType, 
-                        req.inputIndex, 
-                        subScript, 
-                        new bsv.crypto.BN(req.satoshis)
-                    );
 
-                    // 6. Firmamos con la llave actual
-                    const sigObj = bsv.crypto.ECDSA.sign(hash, privKey);
-                    
-                    // 7. Serializamos: Firma DER + el byte del sighash type
-                    const fullSig = sigObj.toString() + (sighashType & 0xff).toString(16).padStart(2, '0');
+                    // ✅ Usar signTx (la misma que TestWallet)
+                    const sig = signTx(
+                        tx,
+                        privKey,
+                        subScript,
+                        req.satoshis,
+                        req.inputIndex,
+                        sighashType
+                    );
 
                     responses.push({
                         inputIndex: req.inputIndex,
-                        sig: fullSig,
+                        sig: sig,                 // signTx ya devuelve DER + sighash byte
                         publicKey: privKey.toPublicKey().toString(),
                         sigHashType: sighashType,
                         csIdx: req.csIdx,
                     });
-
                 } catch (e) {
-                    // Si esta llave no puede firmar este requerimiento, pasamos a la siguiente
+                    // Si esta clave no puede firmar, continuar
                     continue;
                 }
             }
         }
-        
         return responses;
     }
 
