@@ -337,30 +337,38 @@ export class GNWallet extends Signer {
         const responses: SignatureResponse[] = [];
 
         for (const req of sigRequests) {
-            // Determinar las direcciones que debemos firmar
+            // Determinar las direcciones a firmar
             let addresses: bsv.Address[] = [];
             if (req.address) {
                 addresses = Array.isArray(req.address) ? req.address : [req.address];
             } else {
-                // Si no hay dirección, usar todas las claves (raro, pero por compatibilidad)
+                // Si no hay dirección, usar todas las claves (poco común, pero por compatibilidad)
                 addresses = Array.from(this.privateKeys.keys()).map(addrStr => new bsv.Address(addrStr));
             }
 
             for (const addr of addresses) {
                 const privKey = this.privateKeys.get(addr.toString());
                 if (!privKey) {
-                    console.warn(`[GNWallet] No se encontró clave para dirección ${addr}`);
+                    console.warn(`[GNWallet] No se encontró clave para ${addr}`);
                     continue;
                 }
-
                 if (!req.scriptHex || !req.satoshis) {
-                    console.error(`[GNWallet] Faltan datos para input ${req.inputIndex}`);
-                    continue;
+                    throw new Error(`Datos insuficientes para input ${req.inputIndex}`);
                 }
 
+                // 1. Reconstruir el locking script
                 const script = bsv.Script.fromHex(req.scriptHex);
+                // 2. Inyectar el output en el input (¡fundamental!)
+                if (tx.inputs[req.inputIndex]) {
+                    tx.inputs[req.inputIndex].output = new bsv.Transaction.Output({
+                        script: script,
+                        satoshis: req.satoshis
+                    });
+                }
+                // 3. Manejar OP_CODESEPARATOR si existe
                 const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
                 const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
+                // 4. Firmar con signTx (la misma función que TestWallet)
                 const signature = signTx(
                     tx,
                     privKey,
@@ -369,7 +377,6 @@ export class GNWallet extends Signer {
                     req.inputIndex,
                     sighashType
                 );
-
                 responses.push({
                     inputIndex: req.inputIndex,
                     sig: signature,
