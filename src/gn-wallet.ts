@@ -280,7 +280,7 @@ export class GNWallet extends Signer {
         return responses;
     }*/
 
-    async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+    /*async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
         const tx = new bsv.Transaction(rawTxHex);
         const responses: SignatureResponse[] = [];
 
@@ -328,6 +328,71 @@ export class GNWallet extends Signer {
                 }
             }
         }
+        return responses;
+    }*/
+
+    async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
+        const tx = new bsv.Transaction(rawTxHex);
+        const responses: SignatureResponse[] = [];
+        
+        // Obtenemos todas las llaves disponibles en la billetera
+        const allPrivateKeys = Array.from(this.privateKeys.values());
+
+        for (const req of sigRequests) {
+            for (const privKey of allPrivateKeys) {
+                try {
+                    // 1. Determinamos el script. 
+                    // Si el request no lo trae, construimos el P2PKH de la llave actual.
+                    const script = req.scriptHex 
+                        ? bsv.Script.fromHex(req.scriptHex) 
+                        : bsv.Script.buildPublicKeyHashOut(privKey.toAddress());
+
+                    // 2. PASO CRUCIAL: Inyectamos el output previo en el input de la TX.
+                    // Sin esto, el cálculo del sighash (Preimage) será incorrecto para smart contracts.
+                    if (tx.inputs[req.inputIndex]) {
+                        tx.inputs[req.inputIndex].output = new bsv.Transaction.Output({
+                            script: script,
+                            satoshis: req.satoshis
+                        });
+                    }
+
+                    // 3. Preparamos el subscript (manejando OP_CODESEPARATOR si existe)
+                    const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
+                    
+                    // 4. Definimos el sighashType. 
+                    // Usamos DEFAULT_SIGHASH_TYPE (0x41) para asegurar SIGHASH_ALL | SIGHASH_FORKID
+                    const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
+                    
+                    // 5. Calculamos el Hash de la transacción (Sighash)
+                    const hash = bsv.Transaction.Sighash.sighash(
+                        tx, 
+                        sighashType, 
+                        req.inputIndex, 
+                        subScript, 
+                        new bsv.crypto.BN(req.satoshis)
+                    );
+
+                    // 6. Firmamos con la llave actual
+                    const sigObj = bsv.crypto.ECDSA.sign(hash, privKey);
+                    
+                    // 7. Serializamos: Firma DER + el byte del sighash type
+                    const fullSig = sigObj.toString() + (sighashType & 0xff).toString(16).padStart(2, '0');
+
+                    responses.push({
+                        inputIndex: req.inputIndex,
+                        sig: fullSig,
+                        publicKey: privKey.toPublicKey().toString(),
+                        sigHashType: sighashType,
+                        csIdx: req.csIdx,
+                    });
+
+                } catch (e) {
+                    // Si esta llave no puede firmar este requerimiento, pasamos a la siguiente
+                    continue;
+                }
+            }
+        }
+        
         return responses;
     }
 
