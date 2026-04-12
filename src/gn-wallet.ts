@@ -1,5 +1,5 @@
 // src/gn-wallet.ts (v1.0.11)
-import { Signer, Provider, AddressOption, SignTransactionOptions, SignatureRequest, SignatureResponse, DEFAULT_SIGHASH_TYPE } from 'scrypt-ts';
+import { UTXO, Signer, Provider, AddressOption, SignTransactionOptions, SignatureRequest, SignatureResponse, DEFAULT_SIGHASH_TYPE } from 'scrypt-ts';
 import * as bsv from '@scrypt-inc/bsv';
 import { GNWalletOptions } from './interfaces';
 import { signTx } from 'scryptlib/dist';
@@ -67,15 +67,7 @@ export class GNWallet extends Signer {
         return this.pubKey;
     }
 
-    /*async getPubKey(address?: AddressOption): Promise<bsv.PublicKey> {
-        if (address) {
-            const addrStr = address.toString();
-            const key = this.privateKeys.get(addrStr);
-            if (key) return key.toPublicKey();
-            throw new Error(`GNWallet no posee la llave para la dirección: ${addrStr}`);
-        }
-        return this.pubKey;
-    }*/
+
    async getPubKey(address?: AddressOption): Promise<bsv.PublicKey> {
         if (address) {
             const addrStr = address.toString();
@@ -100,237 +92,6 @@ export class GNWallet extends Signer {
     setProvider(provider: Provider): void {
         this.provider = provider;
     }
-
-    /*async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
-        const tx = new bsv.Transaction(rawTxHex);
-        const responses: SignatureResponse[] = [];
-
-        for (const req of sigRequests) {
-            try {
-                // Determinar qué dirección debe firmar
-                const addressesToTry = req.address 
-                    ? (Array.isArray(req.address) ? req.address : [req.address]) 
-                    : [this.address];
-
-                let signingKey: bsv.PrivateKey | undefined;
-                for (const addr of addressesToTry) {
-                    signingKey = this.privateKeys.get(addr.toString());
-                    if (signingKey) break;
-                }
-
-                if (!signingKey) {
-                    throw new Error(`No se encontró llave privada para firmar el input ${req.inputIndex}`);
-                }
-
-                const script = req.scriptHex 
-                    ? bsv.Script.fromHex(req.scriptHex) 
-                    : bsv.Script.buildPublicKeyHashOut(signingKey.toAddress());
-                
-                const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
-                const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
-                
-                const hash = bsv.Transaction.Sighash.sighash(
-                    tx,
-                    sighashType,
-                    req.inputIndex,
-                    subScript,
-                    new bsv.crypto.BN(req.satoshis)
-                );
-
-                const sigObj = bsv.crypto.ECDSA.sign(hash, signingKey);
-                const sigHex = sigObj.toString();
-                const sighashByte = (sighashType & 0xff).toString(16).padStart(2, '0');
-                const fullSig = sigHex + sighashByte;
-
-                responses.push({
-                    inputIndex: req.inputIndex,
-                    sig: fullSig,
-                    publicKey: signingKey.toPublicKey().toString(),
-                    sigHashType: sighashType,
-                    csIdx: req.csIdx,
-                });
-
-            } catch (e) {
-                console.error(`[GNWallet] Error firmando input ${req.inputIndex}:`, e);
-                responses.push({
-                    inputIndex: req.inputIndex,
-                    sig: '',
-                    publicKey: '',
-                    sigHashType: req.sigHashType ?? DEFAULT_SIGHASH_TYPE,
-                    csIdx: req.csIdx,
-                });
-            }
-        }
-        return responses;
-    }*/
-   /*async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
-        const tx = new bsv.Transaction(rawTxHex);
-        const responses: SignatureResponse[] = [];
-
-        for (const req of sigRequests) {
-            try {
-                // 1. Buscamos si tenemos la llave para alguna de las direcciones solicitadas
-                const addressesToTry = req.address 
-                    ? (Array.isArray(req.address) ? req.address : [req.address]) 
-                    : [this.address];
-
-                let signingKey: bsv.PrivateKey | undefined;
-                for (const addr of addressesToTry) {
-                    signingKey = this.privateKeys.get(addr.toString());
-                    if (signingKey) break;
-                }
-
-                // --- CAMBIO CRUCIAL ---
-                // Si no tenemos la llave, NO agregamos nada al array de respuestas.
-                if (!signingKey) {
-                    continue; 
-                }
-
-                const script = req.scriptHex 
-                    ? bsv.Script.fromHex(req.scriptHex) 
-                    : bsv.Script.buildPublicKeyHashOut(signingKey.toAddress());
-                
-                const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
-                const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
-                
-                const hash = bsv.Transaction.Sighash.sighash(
-                    tx,
-                    sighashType,
-                    req.inputIndex,
-                    subScript,
-                    new bsv.crypto.BN(req.satoshis)
-                );
-
-                const sigObj = bsv.crypto.ECDSA.sign(hash, signingKey);
-                const sigHex = sigObj.toString();
-                const sighashByte = (sighashType & 0xff).toString(16).padStart(2, '0');
-                const fullSig = sigHex + sighashByte;
-
-                responses.push({
-                    inputIndex: req.inputIndex,
-                    sig: fullSig,
-                    publicKey: signingKey.toPublicKey().toString(), // Siempre será válida aquí
-                    sigHashType: sighashType,
-                    csIdx: req.csIdx,
-                });
-
-            } catch (e) {
-                // Si hay un error real en el proceso de firma, logueamos pero no 
-                // enviamos una respuesta rota que haga crashear la ejecución.
-                console.error(`[GNWallet] Error procesando firma para input ${req.inputIndex}:`, e);
-            }
-        }
-        return responses;
-    }*/
-   /*async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
-        const tx = new bsv.Transaction(rawTxHex);
-        const responses: SignatureResponse[] = [];
-
-        for (const req of sigRequests) {
-            try {
-                // 1. Identificar qué llaves vamos a probar para este requerimiento
-                let keysToTry: bsv.PrivateKey[] = [];
-
-                if (req.address) {
-                    // Si el request pide una dirección específica (o varias)
-                    const addresses = Array.isArray(req.address) ? req.address : [req.address];
-                    for (const addr of addresses) {
-                        const key = this.privateKeys.get(addr.toString());
-                        if (key) keysToTry.push(key);
-                    }
-                } else {
-                    // Si el request NO especifica dirección (común en contratos complejos),
-                    // probamos con TODAS las llaves que tenemos en el Map.
-                    keysToTry = Array.from(this.privateKeys.values());
-                }
-
-                // 2. Firmar con cada llave válida encontrada
-                for (const signingKey of keysToTry) {
-                    const script = req.scriptHex 
-                        ? bsv.Script.fromHex(req.scriptHex) 
-                        : bsv.Script.buildPublicKeyHashOut(signingKey.toAddress());
-                    
-                    const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
-                    const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
-                    
-                    const hash = bsv.Transaction.Sighash.sighash(
-                        tx,
-                        sighashType,
-                        req.inputIndex,
-                        subScript,
-                        new bsv.crypto.BN(req.satoshis)
-                    );
-
-                    const sigObj = bsv.crypto.ECDSA.sign(hash, signingKey);
-                    const sigHex = sigObj.toString();
-                    const sighashByte = (sighashType & 0xff).toString(16).padStart(2, '0');
-                    const fullSig = sigHex + sighashByte;
-
-                    responses.push({
-                        inputIndex: req.inputIndex,
-                        sig: fullSig,
-                        publicKey: signingKey.toPublicKey().toString(),
-                        sigHashType: sighashType,
-                        csIdx: req.csIdx,
-                    });
-                }
-            } catch (e) {
-                console.error(`[GNWallet] Error procesando firmas para input ${req.inputIndex}:`, e);
-            }
-        }
-        return responses;
-    }*/
-
-    /*async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
-        const tx = new bsv.Transaction(rawTxHex);
-        const responses: SignatureResponse[] = [];
-
-        // Obtenemos todas las llaves que tiene la billetera
-        const allPrivateKeys = Array.from(this.privateKeys.values());
-        console.log(`[DEBUG] GNWallet posee ${allPrivateKeys.length} llaves.`);
-        allPrivateKeys.forEach((k, i) => {
-            console.log(`[DEBUG] Llave ${i} -> Public Key: ${k.toPublicKey().toString()}`);
-        });
-        console.log(`[DEBUG] El contrato está pidiendo específicamente: 02166c5a6c7f6146821c18c39bfe80ed1541c5317ace48d5892f9ba680a130e154`);
-
-        for (const req of sigRequests) {
-            // Para cada requerimiento de firma del contrato...
-            for (const privKey of allPrivateKeys) {
-                try {
-                    const pubKeyHex = privKey.toPublicKey().toString();
-                    
-                    // Generamos la firma técnica
-                    const script = req.scriptHex 
-                        ? bsv.Script.fromHex(req.scriptHex) 
-                        : bsv.Script.buildPublicKeyHashOut(privKey.toAddress());
-                    
-                    const subScript = req.csIdx !== undefined ? script.subScript(req.csIdx) : script;
-                    const sighashType = req.sigHashType ?? DEFAULT_SIGHASH_TYPE;
-                    
-                    const hash = bsv.Transaction.Sighash.sighash(
-                        tx, sighashType, req.inputIndex, subScript, new bsv.crypto.BN(req.satoshis)
-                    );
-
-                    const sigObj = bsv.crypto.ECDSA.sign(hash, privKey);
-                    const fullSig = sigObj.toString() + (sighashType & 0xff).toString(16).padStart(2, '0');
-
-                    // ENVIAMOS LA FIRMA
-                    // scrypt-ts usará el campo 'publicKey' para saber si esta firma le sirve
-                    responses.push({
-                        inputIndex: req.inputIndex,
-                        sig: fullSig,
-                        publicKey: pubKeyHex, // <--- Este es el ID que hace el match
-                        sigHashType: sighashType,
-                        csIdx: req.csIdx,
-                    });
-                } catch (e) {
-                    // Si una llave no puede firmar este input, simplemente la saltamos
-                    continue;
-                }
-            }
-        }
-        return responses;
-    }*/
 
     async getSignatures(rawTxHex: string, sigRequests: SignatureRequest[]): Promise<SignatureResponse[]> {
         const tx = new bsv.Transaction(rawTxHex);
@@ -422,7 +183,7 @@ export class GNWallet extends Signer {
         return this.provider.getBalance(addr);
     }
 
-    async _signAndSendTransaction(tx: bsv.Transaction): Promise<string> {
+    /*async _signAndSendTransaction(tx: bsv.Transaction): Promise<string> {
         if (!this.provider) throw new Error("Provider no conectado");
         const changeAddress = this.address;
         const currentUtxos = await this.provider.listUnspent(changeAddress);
@@ -431,6 +192,104 @@ export class GNWallet extends Signer {
         const signedTx = await this.signTransaction(txWithSplit);
         const txid = await this.provider.sendTransaction(signedTx);
         return txid;
+    }*/
+   async _signAndSendTransaction(tx: bsv.Transaction): Promise<string> {
+        if (!this.provider) throw new Error("Provider no conectado");
+        const changeAddress = this.address;
+        const feePerKb = await this.provider.getFeePerKb();
+        const dustLimit = this.options.dustLimit;
+
+        // 1. Obtener UTXOs disponibles
+        const allUtxos = await this.provider.listUnspent(changeAddress);
+        const currentUtxoCount = allUtxos.length;
+
+        // 2. Calcular déficit de fee inicial
+        const currentSize = tx.serialize().length / 2;
+        let requiredFee = Math.ceil((currentSize * feePerKb) / 1000);
+        let currentFee = tx.getFee();
+        let feeDeficit = requiredFee - currentFee;
+
+        // 3. Selección quirúrgica si falta balance para el fee
+        if (feeDeficit > 0) {
+            const neededValue = feeDeficit + dustLimit;
+            const selected = await this.selectUtxosForFee(allUtxos, neededValue, feePerKb);
+            
+            for (const utxo of selected) {
+                tx.from(utxo); // Añade inputs sin borrar los previos (contratos)
+            }
+
+            // IMPORTANTE: Asegurar que existe un output de cambio para los fondos añadidos
+            tx.change(changeAddress);
+
+            // Recalcular tras añadir inputs y output de cambio
+            const newSize = tx.serialize().length / 2;
+            requiredFee = Math.ceil((newSize * feePerKb) / 1000);
+            
+            const totalInputValue = tx.inputs.reduce((sum, input) => sum + (input.output?.satoshis || 0), 0);
+            const totalOutputValue = tx.outputs.reduce((sum, out) => sum + out.satoshis, 0);
+            currentFee = totalInputValue - totalOutputValue;
+            feeDeficit = requiredFee - currentFee;
+
+            // Ajuste fino: si falta un remanente pequeño, se resta del cambio
+            if (feeDeficit > 0) {
+                let changeIndex = -1;
+                for (let i = 0; i < tx.outputs.length; i++) {
+                    const out = tx.outputs[i];
+                    try {
+                        const addr = out.script.toAddress(this.options.network);
+                        if (addr.toString() === changeAddress.toString()) {
+                            changeIndex = i;
+                            break;
+                        }
+                    } catch (e) {
+                        // Script no es P2PKH, ignorar
+                    }
+                }
+                if (changeIndex === -1) {
+                    throw new Error("No hay output de cambio para ajustar el fee");
+                }
+                const changeOutput = tx.outputs[changeIndex];
+                const newValue = changeOutput.satoshis - feeDeficit;
+                if (newValue >= dustLimit) {
+                    // Reemplazar el output por uno nuevo con el valor ajustado
+                    tx.outputs[changeIndex] = new bsv.Transaction.Output({
+                        satoshis: newValue,
+                        script: changeOutput.script
+                    });
+                } else {
+                    throw new Error("Saldo insuficiente para cubrir el fee tras el ajuste");
+                }
+            }
+        }
+
+        // 4. Aplicar split para mantener la billetera líquida
+        const txWithSplit = await this.splitChangeOutput(tx, changeAddress, currentUtxoCount);
+
+        // 5. Firmar y enviar
+        const signedTx = await this.signTransaction(txWithSplit);
+        const txid = await this.provider.sendTransaction(signedTx);
+        return txid;
+    }
+
+    private async selectUtxosForFee(utxos: UTXO[], neededValue: number, feePerKb: number): Promise<UTXO[]> {
+        // Ordenamos de mayor a menor para usar la menor cantidad de inputs posible
+        const sorted = [...utxos].sort((a, b) => b.satoshis - a.satoshis);
+        const selected: UTXO[] = [];
+        let collected = 0;
+
+        for (const utxo of sorted) {
+            selected.push(utxo);
+            collected += utxo.satoshis;
+            
+            // Estimación: cada input P2PKH añade ~148 bytes
+            const estimatedFee = Math.ceil((selected.length * 148 * feePerKb) / 1000);
+            if (collected >= neededValue + estimatedFee) break;
+        }
+
+        if (collected < neededValue) {
+            throw new Error(`Fondos insuficientes para cubrir el fee. Falta: ${neededValue - collected} sats`);
+        }
+        return selected;
     }
 
     private extractAddressFromScript(script: bsv.Script, network: bsv.Networks.Network): bsv.Address | null {
